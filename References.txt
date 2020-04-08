@@ -1,0 +1,6 @@
+I'm basically working my way through the example MPU6050_DMP6, you'll notice in my code a ton is copy pasted from it. 
+I've been using it as something of a guide to figure out how this library works. 
+
+https://github.com/jrowberg/i2cdevlib/tree/master/Arduino/MPU6050
+
+http://www.i2cdevlib.com/docs/html/class_m_p_u6050.html
