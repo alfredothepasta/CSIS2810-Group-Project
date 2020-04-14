@@ -1,5 +1,6 @@
 #include "I2Cdev.h"
 #include "MPU6050_6Axis_MotionApps20.h"
+#include <Servo.h>
 
 #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
     #include "Wire.h"
@@ -31,6 +32,13 @@ VectorFloat gravity;    // [x, y, z]            gravity vector
 float euler[3];         // [psi, theta, phi]    Euler angle container
 float ypr[3];           // [yaw, pitch, roll]   yaw/pitch/roll container and gravity vector
 
+// servos
+Servo yaw;
+Servo pitch;
+Servo roll;
+
+
+
 
 // ================================================================
 // ===               INTERRUPT DETECTION ROUTINE                ===
@@ -48,66 +56,76 @@ void dmpDataReady() {
 
 void setup() {
   // put your setup code here, to run once:
-    // join I2C bus (I2Cdev library doesn't do this automatically)
-    #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
-        Wire.begin();
-        Wire.setClock(400000); // 400kHz I2C clock. Comment this line if having compilation difficulties
-    #elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
-        Fastwire::setup(400, true);
-    #endif
 
-    // start the damn thing
-    Serial.begin(115200);
-    while (!Serial); // wait for Leonardo enumeration, others continue immediately
+  // Servo setup
+  yaw.attach(9);
+  pitch.attach(10);
+  roll.attach(11);
 
-    // initialize device
-    Serial.println(F("Initializing I2C devices..."));
-    mpu.initialize();
-    // INTERRUPT_PIN is the blue pin that takes data from the DMP, we're telling it that we're only taking data from it. 
-    pinMode(INTERRUPT_PIN, INPUT);
+  yaw.write(90);
+  pitch.write(90);
+  roll.write(90);
+  
+    
+  // join I2C bus (I2Cdev library doesn't do this automatically)
+  #if I2CDEV_IMPLEMENTATION == I2CDEV_ARDUINO_WIRE
+      Wire.begin();
+      Wire.setClock(400000); // 400kHz I2C clock. Comment this line if having compilation difficulties
+  #elif I2CDEV_IMPLEMENTATION == I2CDEV_BUILTIN_FASTWIRE
+      Fastwire::setup(400, true);
+  #endif
 
-    // verify connection
-    Serial.println(F("Testing device connections..."));
-    Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
+  // start the damn thing
+  Serial.begin(115200);
+  while (!Serial); // wait for Leonardo enumeration, others continue immediately
 
-    // load and configure the DMP
-    Serial.println(F("Initializing DMP..."));
-    devStatus = mpu.dmpInitialize();
+  // initialize device
+  Serial.println(F("Initializing I2C devices..."));
+  mpu.initialize();
+  // INTERRUPT_PIN is the blue pin that takes data from the DMP, we're telling it that we're only taking data from it. 
+  pinMode(INTERRUPT_PIN, INPUT);
 
-    setOffsets();
+  // verify connection
+  Serial.println(F("Testing device connections..."));
+  Serial.println(mpu.testConnection() ? F("MPU6050 connection successful") : F("MPU6050 connection failed"));
 
-    // make sure it worked (returns 0 if so)
-    if (devStatus == 0) {
-        // Calibration Time: generate offsets and calibrate our MPU6050
-        mpu.CalibrateAccel(6);
-        mpu.CalibrateGyro(6);
-        mpu.PrintActiveOffsets();
-        // turn on the DMP, now that it's ready
-        Serial.println(F("Enabling DMP..."));
-        mpu.setDMPEnabled(true);
+  // load and configure the DMP
+  Serial.println(F("Initializing DMP..."));
+  devStatus = mpu.dmpInitialize();
 
-        // enable Arduino interrupt detection
-        Serial.print(F("Enabling interrupt detection (Arduino external interrupt "));
-        Serial.print(digitalPinToInterrupt(INTERRUPT_PIN));
-        Serial.println(F(")..."));
-        attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN), dmpDataReady, RISING);
-        mpuIntStatus = mpu.getIntStatus();
+  setOffsets();
 
-        // set our DMP Ready flag so the main loop() function knows it's okay to use it
-        Serial.println(F("DMP ready! Waiting for first interrupt..."));
-        dmpReady = true;
+  // make sure it worked (returns 0 if so)
+  if (devStatus == 0) {
+      // Calibration Time: generate offsets and calibrate our MPU6050
+      mpu.CalibrateAccel(6);
+      mpu.CalibrateGyro(6);
+      // turn on the DMP, now that it's ready
+      Serial.println(F("Enabling DMP..."));
+      mpu.setDMPEnabled(true);
 
-        // get expected DMP packet size for later comparison
-        packetSize = mpu.dmpGetFIFOPacketSize();
-    } else {
-        // ERROR!
-        // 1 = initial memory load failed
-        // 2 = DMP configuration updates failed
-        // (if it's going to break, usually the code will be 1)
-        Serial.print(F("DMP Initialization failed (code "));
-        Serial.print(devStatus);
-        Serial.println(F(")"));
-    }
+      // enable Arduino interrupt detection
+      Serial.print(F("Enabling interrupt detection (Arduino external interrupt "));
+      Serial.print(digitalPinToInterrupt(INTERRUPT_PIN));
+      Serial.println(F(")..."));
+      attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN), dmpDataReady, RISING);
+      mpuIntStatus = mpu.getIntStatus();
+
+      // set our DMP Ready flag so the main loop() function knows it's okay to use it
+      Serial.println(F("DMP ready! Waiting for first interrupt..."));
+      dmpReady = true;
+
+      // get expected DMP packet size for later comparison
+      packetSize = mpu.dmpGetFIFOPacketSize();
+  } else {
+      // ERROR!
+      // 1 = initial memory load failed
+      // 2 = DMP configuration updates failed
+      // (if it's going to break, usually the code will be 1)
+      Serial.print(F("DMP Initialization failed (code "));
+      Serial.print(devStatus);
+      Serial.println(F(")"));
+  }
 
 }
 
@@ -132,6 +150,8 @@ void setOffsets(){
 // ================================================================
 
 void loop() {
+  
+  mpu.dmpGetCurrentFIFOPacket(fifoBuffer);
   // Get's the data from the dmp chip
   mpu.dmpGetQuaternion(&q, fifoBuffer);
   mpu.dmpGetGravity(&gravity, &q);
@@ -144,4 +164,17 @@ void loop() {
   Serial.print(ypr[2] * 180/M_PI);
   Serial.print('\n');
 
+  updateServo();
+
+}
+
+void updateServo(){
+  // The values coming in from the board go from -90 to 90, we need to map them from 0 to 180 for the servos
+  int yawValue = map(ypr[0]* 180/M_PI, -90, 90, 0, 180);
+  int pitchValue = map(ypr[1]* 180/M_PI, -90, 90, 0, 180);
+  int rollValue = map(ypr[2]* 180/M_PI, -90, 90, 0, 180);
+  // write the values to the servo
+  yaw.write(yawValue);
+  pitch.write(pitchValue);
+  roll.write(rollValue);
 }
